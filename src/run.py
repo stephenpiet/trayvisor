@@ -183,7 +183,7 @@ def load_dataset(args):
         logger.info("Loading plate dataset...")
         full_dataset = PlateDataset(
             image_dir=args.image_dir,
-            annotations_file=args.annotations_file,
+            annotations_dir=args.annotations_file,
             image_size=tuple(args.image_size)
         )
         

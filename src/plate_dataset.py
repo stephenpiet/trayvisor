@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, List
 import json
 import logging
 
@@ -25,16 +25,17 @@ class PlateDataset(Dataset):
     
     Attributes:
         image_dir (Path): Directory containing the plate images
-        annotations_file (Path): Path to the JSON file containing annotations
+        annotations_dir (Path): Directory containing the plate annotations
         transform (transforms.Compose): Transformations to apply to the images
         image_size (Tuple[int, int]): Target size for the images
+        classes (Dict[str, int]): Mapping of class names to numeric labels
         data (List[Dict]): List of data samples with image paths and annotations
     """
     
     def __init__(
         self,
         image_dir: str,
-        annotations_file: str,
+        annotations_dir: List[Dict],
         image_size: Tuple[int, int] = (32, 32),
         transform: Optional[transforms.Compose] = None
     ):
@@ -42,13 +43,16 @@ class PlateDataset(Dataset):
         
         Args:
             image_dir: Directory containing the plate images
-            annotations_file: Path to the JSON file containing annotations
+            annotations_dir: Directory containing the plate annotations
             image_size: Target size for the images (height, width)
             transform: Optional transforms to apply to the images
         """
         self.image_dir = Path(image_dir)
-        self.annotations_file = Path(annotations_file)
+        self.annotations_dir = annotations_dir
         self.image_size = image_size
+        
+        # Create class mapping
+        self.classes = {"big_vrac": 0, "small_vrac": 1}
         
         # Default transforms if none provided
         if transform is None:
@@ -60,40 +64,51 @@ class PlateDataset(Dataset):
         else:
             self.transform = transform
             
-        # Load annotations
-        self.data = self._load_annotations()
+        # Prepare data samples
+        self.data = self._prepare_data()
         
         logger.info(f"Loaded {len(self.data)} plate images from {image_dir}")
         
-    def _load_annotations(self) -> list:
-        """Load and validate annotations from the JSON file.
+    def _prepare_data(self) -> List[Dict]:
+        """Process annotations and prepare data samples.
         
         Returns:
             List of dictionaries containing image paths and annotations
         """
-        if not self.annotations_file.exists():
-            raise FileNotFoundError(f"Annotations file not found: {self.annotations_file}")
-            
-        with open(self.annotations_file, 'r') as f:
-            annotations = json.load(f)
-            
         data = []
+
+        # Open and read the JSON file
+        with open(self.annotations_dir, 'r') as file:
+            annotations = json.load(file)
+        
         for img_info in annotations:
-            img_path = self.image_dir / img_info['filename']
+            img_path = self.image_dir / img_info['name']
             if not img_path.exists():
                 logger.warning(f"Image not found: {img_path}")
                 continue
                 
-            # Extract bounding box and class information
-            bbox = img_info['bbox']  # [x, y, width, height]
-            class_label = img_info['class']
-            
-            data.append({
-                'image_path': img_path,
-                'bbox': bbox,
-                'class': class_label
-            })
-            
+            # Process each box in the image
+            for box_info in img_info['boxes']:
+                if box_info['is_background']:
+                    continue
+                    
+                # Convert box format from [x, y, width, height] to [x1, y1, x2, y2]
+                bbox = [
+                    box_info['box'][0],  # x1
+                    box_info['box'][1],  # y1
+                    box_info['box'][0] + box_info['box'][2],  # x2
+                    box_info['box'][1] + box_info['box'][3]   # y2
+                ]
+                
+                # Get class label
+                class_label = self.classes[box_info['id']]
+                
+                data.append({
+                    'image_path': img_path,
+                    'bbox': bbox,
+                    'class': class_label,
+                    'box_id': box_info['box_id']
+                })
         return data
         
     def __len__(self) -> int:
@@ -116,12 +131,7 @@ class PlateDataset(Dataset):
         bbox = sample['bbox']
         
         # Crop image to plate region
-        image = image.crop((
-            bbox[0],
-            bbox[1],
-            bbox[0] + bbox[2],
-            bbox[1] + bbox[3]
-        ))
+        image = image.crop(bbox)
         
         # Apply transformations
         if self.transform:
@@ -135,8 +145,10 @@ class PlateDataset(Dataset):
         Returns:
             Dictionary mapping class labels to their counts
         """
-        class_counts = {}
+        class_counts = {0: 0, 1: 0}  # Initialize for both classes
+        
         for sample in self.data:
             class_label = sample['class']
-            class_counts[class_label] = class_counts.get(class_label, 0) + 1
-        return class_counts 
+            class_counts[class_label] += 1
+            
+        return class_counts
