@@ -151,6 +151,7 @@ Example TensorBoard plots:
 The plots highlight the VAE model’s ability to achieve stable convergence when trained on the Plate dataset.
 
 Here are a few examples of the generated images and plots:
+
 ![Inference 1](inf1.png)
 ![Inference 2](inf2.png)
 ![Inference 3](inf3.png)
