@@ -85,14 +85,6 @@ The following improvements were made to the codebase:
    - Added model state loading
    - Added training state loading
 
-3. Loss Function Improvements:
-   - Changed MSE loss reduction from 'sum' to 'mean' to prevent loss scaling with image size
-   - Normalized KL divergence loss by dividing by input size to maintain balance with reconstruction loss
-   - Ensured consistent loss values across different image dimensions
-   - Improved numerical stability in training
-   - Added beta coef for kl loss.
-
-
 4. Linting
    - Added ruff for linting and formating
 
@@ -107,6 +99,19 @@ The `PlateDataset` class was implemented with the following features:
 - Data augmentation
 - Proper error handling
 - Class distribution tracking
+
+
+Loss Improvements
+   - Normalized KL divergence loss by dividing by input size to maintain balance with reconstruction loss
+   - Ensured consistent loss values across different image dimensions
+   - Improved numerical stability in training
+   - Added beta coef for kl loss
+
+Model Improvements:
+   - Increased the size of the model
+   - Increased number of layers and added dropouts
+   - Increased the bottleneck size to 256 because of complexity of the data
+   - Hyperparameter tuning
 
 ### 2. Training with PlateDataset
 
@@ -146,16 +151,17 @@ Key visualizations include:
 
 Example TensorBoard plots:
 
-![Train loss](train_loss.png)
-![Val loss](val_loss.png)
+![Train loss](docs/train_loss.png)
+![Val loss](docs/val_loss.png)
 
 The plots highlight the VAE model’s ability to achieve stable convergence when trained on the Plate dataset.
 
 Here are a few examples of the generated images and plots:
 
-![Inference 1](inf1.png)
-![Inference 2](inf2.png)
-![Inference 3](inf3.png)
+![Inference 1](docs/inf1.png)
+![Inference 2](docs/inf2.png)
+![Inference 3](docs/inf3.png)
+![Inference 4](docs/inf4.png)
 
 
 The model demonstrates satisfactory reconstruction quality, though its performance degrades with RGB (3-channel) inputs and is sensitive to the original resolution. Enhancing the architecture could potentially address these limitations, and increase overall performance.

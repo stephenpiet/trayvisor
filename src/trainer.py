@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import tqdm
+from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
@@ -86,10 +87,11 @@ class Trainer:
         early_stopping_patience: int = 20,
         is_conditional: bool = False,
         load_checkpoint: Optional[str] = None,
-        beta: Optional[float] = 1,
+        beta: Optional[float] = 0.1,
         lr_patience: int = 3,
         lr_factor: float = 0.5,
         min_lr: float = 1e-6,
+        num_classes: Optional[int] = None,
     ):
         """Initialize the Trainer.
 
@@ -110,6 +112,7 @@ class Trainer:
             lr_patience: Number of epochs to wait before reducing learning rate
             lr_factor: Factor to reduce learning rate by
             min_lr: Minimum learning rate
+            num_classes: Number of classes (for Conditional VAE)
         """
         self.model = model.to(device)
         self.train_data = train_data
@@ -121,6 +124,14 @@ class Trainer:
         self.is_conditional = is_conditional
         self.beta = beta
         self.min_lr = min_lr
+        self.num_classes = num_classes
+
+        # Calculate model size and parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        model_size_mb = sum(
+            p.numel() * p.element_size() for p in model.parameters()
+        ) / (1024 * 1024)
 
         # Setup logging directory with timestamp and optional run name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -172,16 +183,20 @@ class Trainer:
             "best_epoch": 0,
             "best_model_path": None,
         }
-
         # Load checkpoint if provided
         if load_checkpoint:
             self.load_checkpoint(load_checkpoint)
 
+        # Log model information
         logger.info(f"Initialized Trainer with model: {model.__class__.__name__}")
         logger.info(f"Training on device: {device}")
         logger.info(f"Logging to: {self.log_dir}")
+        logger.info(f"Model size: {model_size_mb:.2f} MB")
+        logger.info(f"Total parameters: {total_params:,}")
+        logger.info(f"Trainable parameters: {trainable_params:,}")
         if is_conditional:
             logger.info("Training Conditional VAE")
+            logger.info(f"Number of classes: {num_classes}")
 
     def train(self, epochs: int) -> Dict[str, Any]:
         """Train the model for the specified number of epochs.
@@ -269,7 +284,6 @@ class Trainer:
             Loss value for the step
         """
         self.optimizer.zero_grad()
-
         kl_div_loss, recon_loss = self._calc_loss(batch)
         loss = recon_loss + self.beta * kl_div_loss
         loss.backward()
@@ -294,13 +308,20 @@ class Trainer:
         Returns:
             Tuple of (KL divergence loss, reconstruction loss)
         """
-        inputs, _ = batch
-        mu, log_sigma = self.model.encode(inputs)
-        latent_code = self.model.bottleneck(mu, log_sigma)
-        outputs = self.model.decode(latent_code)
+        if self.is_conditional:
+            inputs, conditions = batch
+            mu, log_sigma = self.model.encode(inputs, conditions)
+            latent_code = self.model.bottleneck(mu, log_sigma)
+            outputs = self.model.decode(latent_code, conditions)
+        else:
+            inputs, _ = batch
+            mu, log_sigma = self.model.encode(inputs)
+            latent_code = self.model.bottleneck(mu, log_sigma)
+            outputs = self.model.decode(latent_code)
 
         # Use mean reduction to normalize by number of pixels
-        recon_loss = F.mse_loss(outputs, inputs, reduction="mean")
+        recon_loss = F.l1_loss(outputs, inputs, reduction="sum") / inputs.numel()
+
         # Scale KL divergence loss to match the scale of reconstruction loss
         kl_div_loss = self._kl_divergence(log_sigma, mu) / inputs.numel()
 
@@ -366,14 +387,26 @@ class Trainer:
     @torch.no_grad()
     def _log_generated_images(self):
         """Generate and log sample images to TensorBoard."""
-        samples = torch.stack(
-            [self.test_data[i][0] for i in range(self.num_generated_images)]
-        )
-        generated = self.model(samples)
-        comparison = torch.cat([samples, generated[0]], dim=3)
+        if self.is_conditional:
+            # For conditional VAE, generate samples for each class
+            generated_samples = self.generate_class_samples(self.num_generated_images)
 
-        for i, img in enumerate(comparison):
-            self.writer.add_image(f"generated/{i}", img, global_step=self.epoch)
+            # Log samples for each class
+            for class_idx, samples in generated_samples.items():
+                for i, img in enumerate(samples):
+                    self.writer.add_image(
+                        f"generated/class_{class_idx}/{i}", img, global_step=self.epoch
+                    )
+        else:
+            # For standard VAE, use original behavior
+            samples = torch.stack(
+                [self.test_data[i][0] for i in range(self.num_generated_images)]
+            )
+            generated = self.model(samples)
+            comparison = torch.cat([samples, generated[0]], dim=3)
+
+            for i, img in enumerate(comparison):
+                self.writer.add_image(f"generated/{i}", img, global_step=self.epoch)
 
     def _save_checkpoint(self, is_best: bool = False) -> str:
         """Save a model checkpoint.
@@ -473,3 +506,125 @@ class Trainer:
         self.writer.add_scalar(f"{prefix}recon_loss", metrics["mse"], epoch)
         self.writer.add_scalar(f"{prefix}psnr", metrics["psnr"], epoch)
         self.writer.add_scalar(f"{prefix}kl_div_loss", metrics["kl_loss"], epoch)
+
+    def _calc_class_metrics(
+        self,
+        outputs: torch.Tensor,
+        inputs: torch.Tensor,
+        mu: torch.Tensor,
+        log_sigma: torch.Tensor,
+    ) -> Dict[str, np.ndarray]:
+        """Calculate class-specific metrics for Conditional VAE.
+
+        Args:
+            outputs: Model outputs
+            inputs: Input images
+            mu: Mean of latent distribution
+            log_sigma: Log standard deviation of latent distribution
+
+        Returns:
+            Dictionary of class-specific metrics
+        """
+        class_metrics = {}
+        for i in range(self.num_classes):
+            # Get indices for current class
+            class_indices = self.current_labels == i
+
+            if class_indices.any():
+                # Calculate class-specific MSE
+                class_mse = F.mse_loss(
+                    outputs[class_indices], inputs[class_indices], reduction="mean"
+                ).item()
+
+                # Calculate class-specific PSNR
+                class_psnr = (
+                    10 * torch.log10(1.0 / class_mse) if class_mse > 0 else float("inf")
+                )
+
+                # Calculate class-specific KL divergence
+                class_kl = self._kl_divergence(
+                    log_sigma[class_indices], mu[class_indices]
+                ).item()
+
+                # Store class-specific metrics
+                class_metrics.update(
+                    {
+                        f"class_{i}/mse": class_mse,
+                        f"class_{i}/psnr": class_psnr,
+                        f"class_{i}/kl_loss": class_kl,
+                    }
+                )
+
+        return class_metrics
+
+    def _log_class_metrics(self, metrics, epoch, phase="train"):
+        """Log class-specific metrics to tensorboard."""
+        prefix = f"{phase}/class_"
+        for i in range(self.num_classes):
+            for name, value in metrics.items():
+                if name.startswith(f"{prefix}{i}/"):
+                    self.writer.add_scalar(name, value, epoch)
+
+    def generate_class_samples(self, num_samples: int = 10) -> Dict[int, torch.Tensor]:
+        """Generate samples for each class using the trained CVAE.
+
+        Args:
+            num_samples: Number of samples to generate per class
+
+        Returns:
+            Dictionary mapping class indices to generated samples
+        """
+        if not self.is_conditional:
+            raise ValueError("This method is only available for Conditional VAE")
+
+        self.model.eval()
+        generated_samples = {}
+
+        with torch.no_grad():
+            for class_idx in range(self.num_classes):
+                # Create condition tensor for this class
+                conditions = torch.full(
+                    (num_samples,), class_idx, device=self.device, dtype=torch.long
+                )
+
+                # Generate samples for this class
+                samples = self.model.generate(conditions, num_samples)
+                generated_samples[class_idx] = samples
+
+        return generated_samples
+
+    def save_generated_samples(
+        self, output_dir: Union[str, Path], num_samples: int = 10
+    ):
+        """Save generated samples to disk for visualization.
+
+        Args:
+            output_dir: Directory to save generated samples
+            num_samples: Number of samples to generate per class
+        """
+        if not self.is_conditional:
+            raise ValueError("This method is only available for Conditional VAE")
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate samples for each class
+        generated_samples = self.generate_class_samples(num_samples)
+
+        # Save samples for each class
+        for class_idx, samples in generated_samples.items():
+            class_dir = output_dir / f"class_{class_idx}"
+            class_dir.mkdir(exist_ok=True)
+
+            for i, img in enumerate(samples):
+                # Convert tensor to PIL Image
+                img = img.cpu().numpy()
+                img = ((img + 1) * 127.5).astype(
+                    np.uint8
+                )  # Scale from [-1, 1] to [0, 255]
+                img = img.transpose(1, 2, 0)  # Change from (C, H, W) to (H, W, C)
+
+                # Save image
+                Image.fromarray(img).save(class_dir / f"sample_{i}.png")
+
+        logger.info(f"Saved generated samples to {output_dir}")

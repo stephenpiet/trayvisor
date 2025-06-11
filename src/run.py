@@ -58,7 +58,7 @@ def parse_args():
         "-n",
         "--bottleneck_dim",
         type=int,
-        default=16,
+        default=256,
         help="Size of the VAE bottleneck",
     )
     parser.add_argument(
@@ -78,7 +78,7 @@ def parse_args():
         "-e", "--epochs", type=int, required=True, help="Number of epochs to train"
     )
     parser.add_argument(
-        "-r", "--lr", type=float, default=0.001, help="Learning rate for training"
+        "-r", "--lr", type=float, default=3e-4, help="Learning rate for training"
     )
     parser.add_argument(
         "--early_stopping_patience",
@@ -249,6 +249,7 @@ def main():
             early_stopping_patience=args.early_stopping_patience,
             is_conditional=args.conditional,
             beta=args.beta,
+            num_classes=args.num_classes,
         )
 
         # Train model

@@ -26,8 +26,6 @@ class PlateDataset(Dataset):
         annotations_dir (Path): Directory containing the plate annotations
         transform (transforms.Compose): Transformations to apply to the images
         image_size (Tuple[int, int]): Target size for the images
-        classes (Dict[str, int]): Mapping of class names to numeric labels
-        data (List[Dict]): List of data samples with image paths and annotations
     """
 
     def __init__(
@@ -36,6 +34,7 @@ class PlateDataset(Dataset):
         annotations_dir: List[Dict],
         image_size: Tuple[int, int] = (32, 32),
         transform: Optional[transforms.Compose] = None,
+        gray_scale: Optional[bool] = False,
     ):
         """Initialize the PlateDataset.
 
@@ -48,6 +47,7 @@ class PlateDataset(Dataset):
         self.image_dir = Path(image_dir)
         self.annotations_dir = annotations_dir
         self.image_size = image_size
+        self.gray_scale = gray_scale
 
         # Create class mapping
         self.classes = {"big_vrac": 0, "small_vrac": 1}
@@ -57,6 +57,7 @@ class PlateDataset(Dataset):
             self.transform = transforms.Compose(
                 [
                     transforms.Resize(image_size),
+                    transforms.RandomHorizontalFlip(p=0.5),
                     transforms.ToTensor(),
                     transforms.Normalize(mean=[0.5], std=[0.5]),
                 ]
@@ -136,7 +137,13 @@ class PlateDataset(Dataset):
         sample = self.data[idx]
 
         # Load and crop image
-        image = Image.open(sample["image_path"]).convert("L")  # Convert to grayscale
+        if self.gray_scale:
+            image = Image.open(sample["image_path"]).convert(
+                "L"
+            )  # Convert to grayscale
+
+        else:
+            image = Image.open(sample["image_path"])
         bbox = sample["bbox"]
 
         # Crop image to plate region

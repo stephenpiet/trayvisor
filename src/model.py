@@ -40,19 +40,21 @@ class CNNVAE(VAE):
         in_channels = input_shape[0]
         hw = input_shape[1]
         hw_before_linear = hw // 4
-        flat_dim = 64 * hw_before_linear**2
+        flat_dim = 128 * hw_before_linear**2  # plus de filtres pour plus de capacité
 
         self.encoder = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels=16, kernel_size=5, padding=2),
+            nn.Conv2d(in_channels, 32, kernel_size=5, padding=2),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.Conv2d(
-                in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1
-            ),
+            nn.Dropout(0.1),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
-            nn.Conv2d(
-                in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1
-            ),
+            nn.Dropout(0.1),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(True),
+            nn.Dropout(0.1),
             nn.Flatten(),
             nn.Linear(flat_dim, 2 * bottleneck_dim),
         )
@@ -60,28 +62,21 @@ class CNNVAE(VAE):
         self.decoder = nn.Sequential(
             nn.Linear(bottleneck_dim, flat_dim),
             nn.ReLU(True),
-            Unflatten((64, hw_before_linear, hw_before_linear)),
+            nn.Dropout(0.1),
+            Unflatten((128, hw_before_linear, hw_before_linear)),
             nn.ConvTranspose2d(
-                in_channels=64,
-                out_channels=32,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-                output_padding=1,
+                128, 64, kernel_size=3, stride=2, padding=1, output_padding=1
             ),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
+            nn.Dropout(0.1),
             nn.ConvTranspose2d(
-                in_channels=32,
-                out_channels=16,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-                output_padding=1,
+                64, 32, kernel_size=3, stride=2, padding=1, output_padding=1
             ),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.Conv2d(
-                in_channels=16, out_channels=in_channels, kernel_size=5, padding=2
-            ),
+            nn.Dropout(0.1),
+            nn.Conv2d(32, in_channels, kernel_size=5, padding=2),
             nn.Tanh(),
         )
 
