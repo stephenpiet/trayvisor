@@ -50,7 +50,6 @@ The following improvements were made to the codebase:
    - Added support for both standard VAE and Conditional VAE
    - Added support for gpu training
 
-
 2. Added configuration management in `run.py`:
    - Improved command-line argument handling
    - Added support for different dataset types
@@ -70,8 +69,8 @@ The following improvements were made to the codebase:
    - Added training metrics logging
    - Added model checkpoint logging
    - Setup model logging directory
-### 3. Other Improvements
 
+### 3. Other Improvements
 
 
 
@@ -126,8 +125,39 @@ The training process was analyzed with the following metrics:
 - Class distribution
 - Generated samples quality
 
-Here are a few examples of examples of the generated images and plots:
+#### Training Visualization
+The training progress can be monitored using TensorBoard. To view the visualizations:
 
+```bash
+tensorboard --logdir=results
+```
+
+Key visualizations include:
+1. Loss Curves:
+   - Training and validation reconstruction loss
+   - Training and validation KL divergence loss
+   - Total loss (reconstruction + KL)
+   - Loss curves show the convergence of the model and help identify potential overfitting
+
+2. Generated Images:
+   - Original input images
+   - Reconstructed images
+
+Example TensorBoard plots:
+
+[Insert TensorBoard screenshot showing loss curves]
+[image.png]
+[Insert TensorBoard screenshot showing generated images]
+[image.png]
+
+
+The plots demonstrate:
+- Model convergence over time
+- Moderate quality of reconstructions
+
+Here are a few examples of the generated images and plots:
+[Insert example images showing]
+[image.png]
 
 ## Part 3: Conditional VAE Implementation
 
