@@ -62,17 +62,16 @@ The following improvements were made to the codebase:
    - Added tensorboard logging
    - Added model checkpointing
    - Added early stopping
+   - Added lr scheduler
 
 4. Added proper logging:
    - Configured Python logging
    - Added tensorboard integration
-   - Added training metrics logging
+   - Added metrics logging
    - Added model checkpoint logging
    - Setup model logging directory
 
 ### 3. Other Improvements
-
-
 
 1. Improved dataset handling:
    - Added support for custom datasets
@@ -91,6 +90,8 @@ The following improvements were made to the codebase:
    - Normalized KL divergence loss by dividing by input size to maintain balance with reconstruction loss
    - Ensured consistent loss values across different image dimensions
    - Improved numerical stability in training
+   - Added beta coef for kl loss.
+
 
 4. Linting
    - Added ruff for linting and formating
@@ -157,7 +158,7 @@ Here are a few examples of the generated images and plots:
 ![Inference 3](inf3.png)
 
 
-The model demonstrates satisfactory reconstruction quality, though its performance degrades with RGB (3-channel) inputs and is sensitive to the original resolution. Enhancing the architecture could potentially address these limitations, and incrrease overall performance.
+The model demonstrates satisfactory reconstruction quality, though its performance degrades with RGB (3-channel) inputs and is sensitive to the original resolution. Enhancing the architecture could potentially address these limitations, and increase overall performance.
 
 ## Part 3: Conditional VAE Implementation
 

@@ -92,6 +92,12 @@ def parse_args():
         default=0.8,
         help="Proportion of data to use for training",
     )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=0.1,
+        help="Beta coef for KL loss",
+    )
 
     # Hardware arguments
     parser.add_argument(
@@ -231,20 +237,18 @@ def main():
         # Create model
         net = create_model(args, input_shape)
 
-        # Create optimizer
-        optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
-
         # Create trainer
         vae_trainer = trainer.Trainer(
             model=net,
             train_data=train_dataset,
             test_data=test_dataset,
-            optimizer=optimizer,
+            learning_rate=args.lr,
             batch_size=args.batch_size,
             device=device,
             log_dir=log_dir,
             early_stopping_patience=args.early_stopping_patience,
             is_conditional=args.conditional,
+            beta=args.beta,
         )
 
         # Train model
@@ -255,7 +259,6 @@ def main():
         logger.info("Training completed!")
         logger.info(f"Best model saved at: {history['best_model_path']}")
         logger.info(f"Best epoch: {history['best_epoch']}")
-        breakpoint()
         logger.info(
             f"Best validation loss: {history['val_loss'][history['best_epoch'] - 1]:.4f}"
         )

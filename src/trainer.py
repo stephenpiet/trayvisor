@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -76,15 +77,19 @@ class Trainer:
         model: nn.Module,
         train_data: Dataset,
         test_data: Dataset,
-        optimizer: torch.optim.Optimizer,
         batch_size: int,
+        learning_rate: float,
         device: torch.device,
         log_dir: Union[str, Path] = "./results",
         run_name: Optional[str] = None,
         num_generated_images: int = 10,
-        early_stopping_patience: int = 5,
+        early_stopping_patience: int = 20,
         is_conditional: bool = False,
         load_checkpoint: Optional[str] = None,
+        beta: Optional[float] = 1,
+        lr_patience: int = 3,
+        lr_factor: float = 0.5,
+        min_lr: float = 1e-6,
     ):
         """Initialize the Trainer.
 
@@ -92,24 +97,30 @@ class Trainer:
             model: The VAE model to train
             train_data: Training dataset
             test_data: Test dataset
-            optimizer: Optimizer for training
             batch_size: Batch size for training
+            learning_rate: Initial learning rate
             device: Device to train on
-            log_dir: Base directory for logging and checkpoints
+            log_dir: Directory to save logs and checkpoints
             run_name: Optional name for this training run
             num_generated_images: Number of images to generate for visualization
             early_stopping_patience: Number of epochs to wait before early stopping
             is_conditional: Whether the model is a Conditional VAE
-            load_checkpoint: Path to checkpoint to load for fine-tuning
+            load_checkpoint: Path to checkpoint to load
+            beta: KL divergence weight
+            lr_patience: Number of epochs to wait before reducing learning rate
+            lr_factor: Factor to reduce learning rate by
+            min_lr: Minimum learning rate
         """
         self.model = model.to(device)
         self.train_data = train_data
         self.test_data = test_data
-        self.optimizer = optimizer
-        self.device = device
         self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.device = device
         self.num_generated_images = num_generated_images
         self.is_conditional = is_conditional
+        self.beta = beta
+        self.min_lr = min_lr
 
         # Setup logging directory with timestamp and optional run name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -131,6 +142,18 @@ class Trainer:
             shuffle=False,
             num_workers=2,
             pin_memory=True,
+        )
+
+        # Initialize optimizer
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+        # Initialize learning rate scheduler
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode="min",
+            factor=lr_factor,
+            patience=lr_patience,
+            min_lr=min_lr,
         )
 
         # Initialize tensorboard writer
@@ -182,6 +205,12 @@ class Trainer:
                 val_loss = self._eval_and_log()
                 self.history["val_loss"].append(val_loss)
 
+                # Step the scheduler
+                self.scheduler.step(val_loss)
+
+                # Log the current learning rate
+                current_lr = self.optimizer.param_groups[0]["lr"]
+                self.writer.add_scalar("train/learning_rate", current_lr, self.epoch)
                 # Check for early stopping
                 if self.early_stopping(val_loss, self.model):
                     logger.info(f"Early stopping triggered after {self.epoch} epochs")
@@ -242,7 +271,7 @@ class Trainer:
         self.optimizer.zero_grad()
 
         kl_div_loss, recon_loss = self._calc_loss(batch)
-        loss = recon_loss + kl_div_loss
+        loss = recon_loss + self.beta * kl_div_loss
         loss.backward()
         self.optimizer.step()
 
@@ -299,11 +328,23 @@ class Trainer:
         """
         self.model.eval()
         total_loss = 0.0
+        val_metrics = []
 
-        # Calculate evaluation loss
-        for batch in self.test_loader:
-            kl_div_loss, recon_loss = self._calc_loss(batch)
-            total_loss += (kl_div_loss + recon_loss).item()
+        with torch.no_grad():
+            for batch in self.test_loader:
+                kl_div_loss, recon_loss = self._calc_loss(batch)
+                total_loss += (self.beta * kl_div_loss + recon_loss).item()
+
+                # Calculate per-batch metrics
+                if self.is_conditional:
+                    inputs, labels = batch
+                    outputs, mu, log_sigma = self.model(inputs, labels)
+                else:
+                    inputs, _ = batch  # Unpack the batch tuple
+                    outputs, mu, log_sigma = self.model(inputs)
+
+                batch_metrics = self._calc_metrics(inputs, outputs, mu, log_sigma)
+                val_metrics.append(batch_metrics)
 
         eval_loss = total_loss / len(self.test_loader)
 
@@ -314,6 +355,12 @@ class Trainer:
         # Generate and log sample images
         self._log_generated_images()
 
+        # Log per-batch metrics
+        avg_val_metrics = {
+            k: np.mean([m[k] for m in val_metrics]) for k in val_metrics[0].keys()
+        }
+        self._log_metrics(avg_val_metrics, self.epoch, "val")
+
         return eval_loss
 
     @torch.no_grad()
@@ -323,7 +370,7 @@ class Trainer:
             [self.test_data[i][0] for i in range(self.num_generated_images)]
         )
         generated = self.model(samples)
-        comparison = torch.cat([samples, generated], dim=3)
+        comparison = torch.cat([samples, generated[0]], dim=3)
 
         for i, img in enumerate(comparison):
             self.writer.add_image(f"generated/{i}", img, global_step=self.epoch)
@@ -404,3 +451,25 @@ class Trainer:
             else:
                 samples = self.model.sample(num_samples)
         return samples
+
+    def _calc_metrics(self, inputs, outputs, mu, log_sigma):
+        """Calculate VAE metrics."""
+        # Reconstruction metrics
+        mse = F.mse_loss(outputs, inputs, reduction="mean")
+        psnr = 10 * torch.log10(1.0 / mse)  # Peak Signal-to-Noise Ratio
+
+        # KL divergence loss
+        kl_loss = self._kl_divergence(log_sigma, mu) / inputs.numel()
+
+        return {
+            "mse": mse.item(),
+            "psnr": psnr.item(),
+            "kl_loss": kl_loss.item(),
+        }
+
+    def _log_metrics(self, metrics, epoch, phase="train"):
+        """Log metrics to tensorboard."""
+        prefix = f"{phase}/"
+        self.writer.add_scalar(f"{prefix}recon_loss", metrics["mse"], epoch)
+        self.writer.add_scalar(f"{prefix}psnr", metrics["psnr"], epoch)
+        self.writer.add_scalar(f"{prefix}kl_div_loss", metrics["kl_loss"], epoch)

@@ -15,7 +15,7 @@ class VAE(nn.Module):
         latent_code = self.bottleneck(mu, log_sigma)
         outputs = self.decode(latent_code)
 
-        return outputs
+        return outputs, mu, log_sigma
 
     def encode(self, inputs):
         latent_parameters = self.encoder(inputs)
