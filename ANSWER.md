@@ -146,18 +146,20 @@ Key visualizations include:
 Example TensorBoard plots:
 
 [Insert TensorBoard screenshot showing loss curves]
-[image.png]
+![Train loss](train_loss.png)
 [Insert TensorBoard screenshot showing generated images]
-[image.png]
+[Val loss](val_loss.png)
 
 
-The plots demonstrate:
-- Model convergence over time
-- Moderate quality of reconstructions
+The plots highlight the VAE model’s ability to achieve stable convergence when trained on the Plate dataset.
 
 Here are a few examples of the generated images and plots:
-[Insert example images showing]
-[image.png]
+[Inference 1](inf1.png)
+[Inference 2](inf2.png)
+[Inference 3](inf3.png)
+
+
+The model demonstrates satisfactory reconstruction quality, though its performance degrades with RGB (3-channel) inputs and is sensitive to the original resolution. Enhancing the architecture could potentially address these limitations, and incrrease overall performance.
 
 ## Part 3: Conditional VAE Implementation
 
