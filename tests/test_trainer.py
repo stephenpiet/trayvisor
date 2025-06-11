@@ -1,6 +1,6 @@
-import unittest
-import tempfile
 import shutil
+import tempfile
+import unittest
 from unittest import mock
 
 import numpy as np
@@ -8,8 +8,8 @@ import scipy.stats
 import torch
 from torch.utils.data import Subset
 
-import model
 import dataset
+import model
 import trainer
 
 
@@ -26,11 +26,15 @@ class TestTrainer(unittest.TestCase):
         vae = model.CNNVAE(self.data.train_data[0][0].shape, bottleneck_dim=10)
         optim = torch.optim.Adam(vae.parameters())
         self.log_dir = tempfile.mkdtemp()
-        self.vae_trainer = trainer.Trainer(vae, self.data, optim,
-                                           batch_size=4,
-                                           device='cpu',
-                                           log_dir=self.log_dir,
-                                           num_generated_images=1)
+        self.vae_trainer = trainer.Trainer(
+            vae,
+            self.data,
+            optim,
+            batch_size=4,
+            device="cpu",
+            log_dir=self.log_dir,
+            num_generated_images=1,
+        )
 
     def tearDown(self):
         shutil.rmtree(self.log_dir)
@@ -38,7 +42,7 @@ class TestTrainer(unittest.TestCase):
     @torch.no_grad()
     def test_kl_divergence(self):
         mu = np.random.randn(10) * 0.25
-        sigma = np.random.randn(10) * 0.1 + 1.
+        sigma = np.random.randn(10) * 0.1 + 1.0
         standard_normal_samples = np.random.randn(100000, 10)
         transformed_normal_sample = standard_normal_samples * sigma + mu
 
@@ -47,11 +51,19 @@ class TestTrainer(unittest.TestCase):
         bin_range = [-2, 2]
         expected_kl_div = 0
         for i in range(10):
-            standard_normal_dist, _ = np.histogram(standard_normal_samples[:, i], bins, bin_range)
-            transformed_normal_dist, _ = np.histogram(transformed_normal_sample[:, i], bins, bin_range)
-            expected_kl_div += scipy.stats.entropy(transformed_normal_dist, standard_normal_dist)
+            standard_normal_dist, _ = np.histogram(
+                standard_normal_samples[:, i], bins, bin_range
+            )
+            transformed_normal_dist, _ = np.histogram(
+                transformed_normal_sample[:, i], bins, bin_range
+            )
+            expected_kl_div += scipy.stats.entropy(
+                transformed_normal_dist, standard_normal_dist
+            )
 
-        actual_kl_div = self.vae_trainer._kl_divergence(torch.tensor(sigma).log(), torch.tensor(mu))
+        actual_kl_div = self.vae_trainer._kl_divergence(
+            torch.tensor(sigma).log(), torch.tensor(mu)
+        )
 
         self.assertAlmostEqual(expected_kl_div, actual_kl_div.numpy(), delta=0.05)
 
@@ -64,11 +76,15 @@ class TestTrainer(unittest.TestCase):
         self.assertGreaterEqual(30, self.vae_trainer.eval())
 
     def test_logging(self):
-        with mock.patch.object(self.vae_trainer.summary, 'add_scalar') as add_scalar_mock:
+        with mock.patch.object(
+            self.vae_trainer.summary, "add_scalar"
+        ) as add_scalar_mock:
             self.vae_trainer.train(1)
 
-        expected_calls = [mock.call('train/recon_loss', mock.ANY, 0),
-                          mock.call('train/kl_div_loss', mock.ANY, 0),
-                          mock.call('train/loss', mock.ANY, 0),
-                          mock.call('test/loss', mock.ANY, 0)]
+        expected_calls = [
+            mock.call("train/recon_loss", mock.ANY, 0),
+            mock.call("train/kl_div_loss", mock.ANY, 0),
+            mock.call("train/loss", mock.ANY, 0),
+            mock.call("test/loss", mock.ANY, 0),
+        ]
         add_scalar_mock.assert_has_calls(expected_calls)

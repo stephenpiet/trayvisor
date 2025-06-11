@@ -11,20 +11,20 @@ class ModelTestsMixin:
         self.assertEqual(self.test_inputs.shape, outputs.shape)
 
     @torch.no_grad()
-    @unittest.skipUnless(torch.cuda.is_available(), 'No GPU was detected')
+    @unittest.skipUnless(torch.cuda.is_available(), "No GPU was detected")
     def test_device_moving(self):
-        net_on_gpu = self.net.to('cuda:0')
+        net_on_gpu = self.net.to("cuda:0")
         net_back_on_cpu = net_on_gpu.cpu()
 
         torch.manual_seed(42)
         outputs_cpu = self.net(self.test_inputs)
         torch.manual_seed(42)
-        outputs_gpu = net_on_gpu(self.test_inputs.to('cuda:0'))
+        outputs_gpu = net_on_gpu(self.test_inputs.to("cuda:0"))
         torch.manual_seed(42)
         outputs_back_on_cpu = net_back_on_cpu(self.test_inputs)
 
-        self.assertAlmostEqual(0., torch.sum(outputs_cpu - outputs_gpu.cpu()))
-        self.assertAlmostEqual(0., torch.sum(outputs_cpu - outputs_back_on_cpu))
+        self.assertAlmostEqual(0.0, torch.sum(outputs_cpu - outputs_gpu.cpu()))
+        self.assertAlmostEqual(0.0, torch.sum(outputs_cpu - outputs_back_on_cpu))
 
     def test_batch_independence(self):
         inputs = self.test_inputs.clone()
@@ -65,14 +65,14 @@ class ModelTestsMixin:
             if param.requires_grad:
                 with self.subTest(name=param_name):
                     self.assertIsNotNone(param.grad)
-                    self.assertNotEqual(0., torch.sum(param.grad ** 2))
+                    self.assertNotEqual(0.0, torch.sum(param.grad**2))
 
 
 class DatasetTestsMixin:
     def test_shape(self):
-        with self.subTest(split='train'):
+        with self.subTest(split="train"):
             self._check_shape(self.data.train_data)
-        with self.subTest(split='train'):
+        with self.subTest(split="train"):
             self._check_shape(self.data.test_data)
 
     def _check_shape(self, dataset):
@@ -80,9 +80,9 @@ class DatasetTestsMixin:
         self.assertEqual(self.data_shape, sample.shape)
 
     def test_scaling(self):
-        with self.subTest(split='train'):
+        with self.subTest(split="train"):
             self._check_scaling(self.data.train_data)
-        with self.subTest(split='test'):
+        with self.subTest(split="test"):
             self._check_scaling(self.data.test_data)
 
     def _check_scaling(self, data):
@@ -95,9 +95,9 @@ class DatasetTestsMixin:
             self.assertTrue(torch.any(sample > 0))
 
     def test_augmentation(self):
-        with self.subTest(split='train'):
+        with self.subTest(split="train"):
             self._check_augmentation(self.data.train_data, active=True)
-        with self.subTest(split='test'):
+        with self.subTest(split="test"):
             self._check_augmentation(self.data.test_data, active=False)
 
     def _check_augmentation(self, data, active):
@@ -113,15 +113,15 @@ class DatasetTestsMixin:
             self.assertTrue(all(are_same))
 
     def test_single_process_dataloader(self):
-        with self.subTest(split='train'):
+        with self.subTest(split="train"):
             self._check_dataloader(self.data.train_data, num_workers=0)
-        with self.subTest(split='test'):
+        with self.subTest(split="test"):
             self._check_dataloader(self.data.test_data, num_workers=0)
 
     def test_multi_process_dataloader(self):
-        with self.subTest(split='train'):
+        with self.subTest(split="train"):
             self._check_dataloader(self.data.train_data, num_workers=2)
-        with self.subTest(split='test'):
+        with self.subTest(split="test"):
             self._check_dataloader(self.data.test_data, num_workers=2)
 
     def _check_dataloader(self, data, num_workers):

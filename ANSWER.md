@@ -46,17 +46,20 @@ The following improvements were made to the codebase:
    - Improved code organization with better method separation
    - Added early stopping functionality
    - Implemented proper model checkpointing
+   - Added loading checkpoints 
    - Added support for both standard VAE and Conditional VAE
+   - Added support for gpu training
 
-2. Added configuration management:
+
+2. Added configuration management in `run.py`:
    - Improved command-line argument handling
    - Added support for different dataset types
    - Added configuration for model architecture
    - Added training hyperparameters
 
 3. Improved the training loop:
-   - Added progress tracking with tqdm
-   - Implemented proper validation
+   - Improved progress tracking with tqdm and loss
+   - Implemented more verbose validation
    - Added tensorboard logging
    - Added model checkpointing
    - Added early stopping
@@ -66,30 +69,32 @@ The following improvements were made to the codebase:
    - Added tensorboard integration
    - Added training metrics logging
    - Added model checkpoint logging
-
+   - Setup model logging directory
 ### 3. Other Improvements
 
-1. Added data validation:
-   - Added input shape validation
-   - Added dataset validation
-   - Added model architecture validation
 
-2. Added model evaluation metrics:
-   - Reconstruction loss
-   - KL divergence loss
-   - Total loss
 
-3. Improved dataset handling:
+
+1. Improved dataset handling:
    - Added support for custom datasets
    - Added data augmentation
    - Added proper data loading
    - Added data splitting
 
-4. Added proper model saving/loading:
-   - Added checkpoint saving
+2. Added proper model saving/loading:
+   - Cleaned checkpoint saving
    - Added best model saving
    - Added model state loading
    - Added training state loading
+
+3. Loss Function Improvements:
+   - Changed MSE loss reduction from 'sum' to 'mean' to prevent loss scaling with image size
+   - Normalized KL divergence loss by dividing by input size to maintain balance with reconstruction loss
+   - Ensured consistent loss values across different image dimensions
+   - Improved numerical stability in training
+
+4. Linting
+   - Added ruff for linting and formating
 
 ## Part 2: Feature Implementation
 
@@ -120,6 +125,9 @@ The training process was analyzed with the following metrics:
 - Total loss
 - Class distribution
 - Generated samples quality
+
+Here are a few examples of examples of the generated images and plots:
+
 
 ## Part 3: Conditional VAE Implementation
 
