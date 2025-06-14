@@ -1,12 +1,14 @@
 import unittest
 
-import torch
-
-import dataset
-from tests import templates
+from src.dataset import MyMNIST
 
 
-class TestMNIST(unittest.TestCase, templates.DatasetTestsMixin):
+class TestMyMNIST(unittest.TestCase):
     def setUp(self):
-        self.data = dataset.MyMNIST()
-        self.data_shape = torch.Size((1, 32, 32))
+        self.dataset = MyMNIST()
+
+    def test_train_data(self):
+        self.assertGreater(len(self.dataset.train_data), 0)
+        x, y = self.dataset.train_data[0]
+        self.assertEqual(x.shape, (1, 32, 32))
+        self.assertIsInstance(y, int)
