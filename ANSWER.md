@@ -207,7 +207,10 @@ The model can generate samples for specific conditions:
 - Quality assessment of generated samples
 
 ### 4. Analysis & Discussion
-- Given the model size constraints and limited computation, the performance of the cVAE does not meet satisfactory standards.
+The constrained model capacity and computational resources resulted in suboptimal conditional generation performance.
+
+Validation metrics indicate the model is able to learn all ifferent tasks, hiwever the main limitation seems to be comming from the data which is too complex.
+
 
 ![Val loss](docs/cvae_val_loss.png)
 
@@ -217,4 +220,11 @@ The model can generate samples for specific conditions:
 ![cVAE Inference 1](docs/cvae_inf1.png)
 ![cVAE Inference 2](docs/cvae_inf2.png)
 
-Although the output are very blurry, it seems to be possible to distiguish the 2 classes just by looking at the color tone of the generated samples.
+Although the output are very blurry, it seems to be possible to distiguish the 2 classes just by looking at the color tone of the generated samples. 
+
+In a nut-shell, although the current implementation captures coarse class characteristics, substantial improvements would be needed for production-grade performance, including:
+
+- Implement image preprocessing to amplify class-distinctive features
+- Use bigger models with increased capacity and performing GPUs
+- Use other generation models (attention mecanisms, adversarial architectures..)
+

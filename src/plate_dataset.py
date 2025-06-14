@@ -36,14 +36,7 @@ class PlateDataset(Dataset):
         transform: Optional[transforms.Compose] = None,
         gray_scale: Optional[bool] = False,
     ):
-        """Initialize the PlateDataset.
-
-        Args:
-            image_dir: Directory containing the plate images
-            annotations_dir: Directory containing the plate annotations
-            image_size: Target size for the images (height, width)
-            transform: Optional transforms to apply to the images
-        """
+        """Initialize the PlateDataset."""
         self.image_dir = Path(image_dir)
         self.annotations_dir = annotations_dir
         self.image_size = image_size
