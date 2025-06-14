@@ -9,28 +9,41 @@
 - Operating System: Linux 6.11.0-26-generic
 - Dependencies: Updated requirements.txt with Python 3.12 compatible versions
 
-#### Setup Steps
-1. Create a virtual environment:
+## Setup and Installation
+
+This project uses Poetry for dependency management. Follow these steps to set up your environment:
+
+1. Install Poetry (if not already installed):
 ```bash
-python3.12 -m venv venv
-source venv/bin/activate
+curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-2. Install dependencies:
+2. Install project dependencies:
 ```bash
-pip install -r requirements.txt
+poetry install
 ```
+
+3. Activate the virtual environment:
+```bash
+poetry shell
+```
+
+4. Run the training script:
+```bash
+poetry run train
+```
+
 
 3. Run the training script:
 ```bash
 # For MNIST dataset
-python src/run.py -t cnn -b 64 -e 10
+poetry run python src/run.py -t cnn -b 64 -e 10
 
 # For plate dataset
-python src/run.py -t cnn -b 64 -e 10 --dataset plate --image_dir /path/to/images --annotations_file /path/to/annotations.json
+poetry run python src/run.py -t cnn -b 64 -e 10 --dataset plate --image_dir /path/to/images --annotations_file /path/to/annotations.json
 
 # For Conditional VAE
-python src/run.py -t cnn -b 64 -e 10 --dataset plate --image_dir /path/to/images --annotations_file /path/to/annotations.json --conditional --num_classes <number_of_classes>
+poetry run python src/run.py -t cnn -b 64 -e 10 --dataset plate --image_dir /path/to/images --annotations_file /path/to/annotations.json --conditional --num_classes <number_of_classes>
 ```
 
 ### 2. Code Refactoring
@@ -135,7 +148,7 @@ The training process was analyzed with the following metrics:
 The training progress can be monitored using TensorBoard. To view the visualizations:
 
 ```bash
-tensorboard --logdir=results
+poetry run tensorboard --logdir=results
 ```
 
 Key visualizations include:
@@ -194,30 +207,14 @@ The model can generate samples for specific conditions:
 - Quality assessment of generated samples
 
 ### 4. Analysis & Discussion
+- Given the model size constraints and limited computation, the performance of the cVAE does not meet satisfactory standards.
 
-The Conditional VAE implementation was analyzed:
-- Architecture changes for conditioning
-- Condition embedding implementation
-- Training process analysis
-- Generated sample quality assessment
+![Val loss](docs/cvae_val_loss.png)
 
-## Usage Examples
 
-### Training a Standard VAE on MNIST
-```bash
-python src/run.py -t cnn -b 64 -e 10
-```
+- Here are a few examples of reconstructed images for each class:
 
-### Training a Standard VAE on Plate Dataset
-```bash
-python src/run.py -t cnn -b 64 -e 10 \
-    --dataset plate \
-    --image_dir /path/to/images \
-- Will document training process
-- Show example reconstructions
-- Analyze model performance
+![cVAE Inference 1](docs/cvae_inf1.png)
+![cVAE Inference 2](docs/cvae_inf2.png)
 
-## Part 3: Conditional VAE Implementation (Optional)
-- Will implement cVAE architecture
-- Add conditional generation capabilities
-- Document the implementation and results 
+Although the output are very blurry, it seems to be possible to distiguish the 2 classes just by looking at the color tone of the generated samples.

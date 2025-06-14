@@ -271,61 +271,139 @@ class Trainer:
 
         return total_loss / num_batches
 
+    def _calc_loss(
+        self, batch: Tuple[torch.Tensor, ...]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Calculate the loss for a batch of data.
+
+        Returns:
+            Tuple of (KL divergence loss, reconstruction loss, classifier loss)
+        """
+        if self.is_conditional:
+            inputs, conditions = batch
+            # Ensure encode() returns exactly 2 values
+            mu, log_sigma = self.model.encode(inputs, conditions)
+            z = self.model.bottleneck(mu, log_sigma)
+            outputs = self.model.decode(z, conditions)
+
+            # Reconstruction loss
+            recon_loss = F.mse_loss(outputs, inputs, reduction="sum") / inputs.numel()
+
+            # KL divergence
+            kl_loss = (
+                -0.5
+                * torch.sum(1 + log_sigma - mu.pow(2) - log_sigma.exp())
+                / inputs.numel()
+            )
+
+            # Classification loss
+            class_logits = self.model.classify_from_latent(z)
+            classifier_loss = F.cross_entropy(class_logits, conditions)
+
+            return kl_loss, recon_loss, classifier_loss
+        else:
+            inputs, _ = batch
+            mu, log_sigma = self.model.encode(inputs)
+            z = self.model.bottleneck(mu, log_sigma)
+            outputs = self.model.decode(z)
+
+            recon_loss = F.mse_loss(outputs, inputs, reduction="sum") / inputs.numel()
+            kl_loss = (
+                -0.5
+                * torch.sum(1 + log_sigma - mu.pow(2) - log_sigma.exp())
+                / inputs.numel()
+            )
+
+            return kl_loss, recon_loss, torch.tensor(0.0)  # Dummy classifier loss
+
     def _train_step(
         self, batch: Union[Tuple[torch.Tensor, ...], Tuple[torch.Tensor, torch.Tensor]]
     ) -> float:
-        """Perform a single training step.
-
-        Args:
-            batch: Tuple of (inputs, targets) tensors for standard VAE
-                  or (inputs, conditions) tensors for Conditional VAE
-
-        Returns:
-            Loss value for the step
-        """
+        """Perform a single training step."""
         self.optimizer.zero_grad()
-        kl_div_loss, recon_loss = self._calc_loss(batch)
-        loss = recon_loss + self.beta * kl_div_loss
+
+        if self.is_conditional:
+            kl_div_loss, recon_loss, classifier_loss = self._calc_loss(batch)
+            loss = recon_loss + self.beta * kl_div_loss + 0.1 * classifier_loss
+        else:
+            kl_div_loss, recon_loss, _ = self._calc_loss(batch)
+            loss = recon_loss + self.beta * kl_div_loss
+
         loss.backward()
         self.optimizer.step()
 
         # Log step metrics
         self.writer.add_scalar("train/recon_loss", recon_loss.item(), self.step)
         self.writer.add_scalar("train/kl_div_loss", kl_div_loss.item(), self.step)
+        if self.is_conditional:
+            self.writer.add_scalar(
+                "train/classifier_loss", classifier_loss.item(), self.step
+            )
         self.writer.add_scalar("train/loss", loss.item(), self.step)
         self.step += 1
 
         return loss.item()
 
-    def _calc_loss(
-        self, batch: Tuple[torch.Tensor, ...]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Calculate the loss for a batch of data.
+    @torch.no_grad()
+    def _eval_and_log(self) -> float:
+        """Evaluate model on test set and log results."""
+        self.model.eval()
+        total_loss = 0.0
+        val_metrics = []
+        total_classifier_loss = 0.0 if self.is_conditional else None
 
-        Args:
-            batch: Input data batch
+        with torch.no_grad():
+            for batch in self.test_loader:
+                if self.is_conditional:
+                    kl_div_loss, recon_loss, classifier_loss = self._calc_loss(batch)
+                    total_loss += (
+                        recon_loss + self.beta * kl_div_loss + 0.1 * classifier_loss
+                    ).item()
+                    total_classifier_loss += classifier_loss.item()
+                else:
+                    kl_div_loss, recon_loss, _ = self._calc_loss(batch)
+                    total_loss += (recon_loss + self.beta * kl_div_loss).item()
 
-        Returns:
-            Tuple of (KL divergence loss, reconstruction loss)
-        """
-        if self.is_conditional:
-            inputs, conditions = batch
-            mu, log_sigma = self.model.encode(inputs, conditions)
-            latent_code = self.model.bottleneck(mu, log_sigma)
-            outputs = self.model.decode(latent_code, conditions)
-        else:
-            inputs, _ = batch
-            mu, log_sigma = self.model.encode(inputs)
-            latent_code = self.model.bottleneck(mu, log_sigma)
-            outputs = self.model.decode(latent_code)
+                # Calculate per-batch metrics
+                if self.is_conditional:
+                    inputs, labels = batch
+                    outputs, mu, log_sigma = self.model(inputs, labels)
+                else:
+                    inputs, _ = batch
+                    outputs, mu, log_sigma = self.model(inputs)
 
-        # Use mean reduction to normalize by number of pixels
-        recon_loss = F.l1_loss(outputs, inputs, reduction="sum") / inputs.numel()
+                batch_metrics = self._calc_metrics(inputs, outputs, mu, log_sigma)
+                val_metrics.append(batch_metrics)
 
-        # Scale KL divergence loss to match the scale of reconstruction loss
-        kl_div_loss = self._kl_divergence(log_sigma, mu) / inputs.numel()
+        eval_loss = total_loss / len(self.test_loader)
 
-        return kl_div_loss, recon_loss
+        # Log epoch metrics
+        self.writer.add_scalar("val/loss", eval_loss, self.epoch)
+        if self.is_conditional and total_classifier_loss is not None:
+            avg_classifier_loss = total_classifier_loss / len(self.test_loader)
+            self.writer.add_scalar(
+                "val/classifier_loss", avg_classifier_loss, self.epoch
+            )
+
+        logger.info(
+            f"Epoch {self.epoch} - Val Loss: {eval_loss:.4f}"
+            + (
+                f" | Classifier Loss: {avg_classifier_loss:.4f}"
+                if self.is_conditional
+                else ""
+            )
+        )
+
+        # Generate and log sample images
+        self._log_generated_images()
+
+        # Log per-batch metrics
+        avg_val_metrics = {
+            k: np.mean([m[k] for m in val_metrics]) for k in val_metrics[0].keys()
+        }
+        self._log_metrics(avg_val_metrics, self.epoch, "val")
+
+        return eval_loss
 
     @staticmethod
     def _kl_divergence(log_sigma: torch.Tensor, mu: torch.Tensor) -> torch.Tensor:
@@ -339,50 +417,6 @@ class Trainer:
             KL divergence loss
         """
         return 0.5 * torch.sum((2 * log_sigma).exp() + mu**2 - 1 - 2 * log_sigma)
-
-    @torch.no_grad()
-    def _eval_and_log(self) -> float:
-        """Evaluate model on test set and log results.
-
-        Returns:
-            Average evaluation loss
-        """
-        self.model.eval()
-        total_loss = 0.0
-        val_metrics = []
-
-        with torch.no_grad():
-            for batch in self.test_loader:
-                kl_div_loss, recon_loss = self._calc_loss(batch)
-                total_loss += (self.beta * kl_div_loss + recon_loss).item()
-
-                # Calculate per-batch metrics
-                if self.is_conditional:
-                    inputs, labels = batch
-                    outputs, mu, log_sigma = self.model(inputs, labels)
-                else:
-                    inputs, _ = batch  # Unpack the batch tuple
-                    outputs, mu, log_sigma = self.model(inputs)
-
-                batch_metrics = self._calc_metrics(inputs, outputs, mu, log_sigma)
-                val_metrics.append(batch_metrics)
-
-        eval_loss = total_loss / len(self.test_loader)
-
-        # Log epoch metrics
-        self.writer.add_scalar("val/loss", eval_loss, self.epoch)
-        logger.info(f"Epoch {self.epoch} - Val Loss: {eval_loss:.4f}")
-
-        # Generate and log sample images
-        self._log_generated_images()
-
-        # Log per-batch metrics
-        avg_val_metrics = {
-            k: np.mean([m[k] for m in val_metrics]) for k in val_metrics[0].keys()
-        }
-        self._log_metrics(avg_val_metrics, self.epoch, "val")
-
-        return eval_loss
 
     @torch.no_grad()
     def _log_generated_images(self):

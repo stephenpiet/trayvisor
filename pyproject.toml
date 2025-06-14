@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "cvae-mnist"
+version = "0.1.0"
+description = "Conditional Variational Autoencoder for MNIST"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+# Only include PyTorch source for torch packages
+[[tool.poetry.source]]
+name = "pytorch-torch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "supplemental"
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+torch = ">=2.1.0"
+torchvision = ">=0.16.0"
+scipy = ">=1.11.0"
+tensorboard = ">=2.14.0"
+tqdm = ">=4.66.0"
+numpy = ">=1.24.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+train = "src.train_cvae:main"
