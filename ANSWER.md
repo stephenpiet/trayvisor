@@ -164,17 +164,17 @@ Key visualizations include:
 
 Example TensorBoard plots:
 
-![Train loss](docs/train_loss.png)
-![Val loss](docs/val_loss.png)
+![Train loss](doc/train_loss.png)
+![Val loss](doc/val_loss.png)
 
-The plots highlight the VAE model’s ability to achieve stable convergence when trained on the Plate dataset.
+The plots highlight the VAE model's ability to achieve stable convergence when trained on the Plate dataset.
 
 Here are a few examples of the generated images and plots:
 
-![Inference 1](docs/inf1.png)
-![Inference 2](docs/inf2.png)
-![Inference 3](docs/inf3.png)
-![Inference 4](docs/inf4.png)
+![Inference 1](doc/inf1.png)
+![Inference 2](doc/inf2.png)
+![Inference 3](doc/inf3.png)
+![Inference 4](doc/inf4.png)
 
 
 The model demonstrates satisfactory reconstruction quality, though its performance degrades with RGB (3-channel) inputs and is sensitive to the original resolution. Enhancing the architecture could potentially address these limitations, and increase overall performance.
@@ -212,13 +212,13 @@ The constrained model capacity and computational resources resulted in suboptima
 Validation metrics indicate the model is able to learn all ifferent tasks, hiwever the main limitation seems to be comming from the data which is too complex.
 
 
-![Val loss](docs/cvae_val_loss.png)
+![Val loss](doc/cvae_val_loss.png)
 
 
 - Here are a few examples of reconstructed images for each class:
 
-![cVAE Inference 1](docs/cvae_inf1.png)
-![cVAE Inference 2](docs/cvae_inf2.png)
+![cVAE Inference 1](doc/cvae_inf1.png)
+![cVAE Inference 2](doc/cvae_inf2.png)
 
 Although the output are very blurry, it seems to be possible to distiguish the 2 classes just by looking at the color tone of the generated samples. 
 
